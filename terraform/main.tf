@@ -64,15 +64,15 @@ module "vpc" {
   }
 }
 
-# EKS Cluster Module — stable version supporting vpc_subnet_ids
+# EKS Module (uses `subnets` instead of `vpc_subnet_ids`)
 module "eks" {
   source  = "terraform-aws-modules/eks/aws"
-  version = "17.24.0" # ✅ use the version that expects `subnets` instead
+  version = "17.24.0"  # ✅ version that supports `subnets`
 
   cluster_name    = var.cluster_name
   cluster_version = "1.27"
   vpc_id          = module.vpc.vpc_id
-  subnets         = module.vpc.private_subnets  # 👈 REVERTED TO `subnets`
+  subnets         = module.vpc.private_subnets  # 👈 This works in v17.x
 
   eks_managed_node_groups = {
     default = {
@@ -89,7 +89,7 @@ module "eks" {
   }
 }
 
-# ArgoCD Helm Deployment
+# Install ArgoCD with Helm
 resource "helm_release" "argocd" {
   name             = "argocd"
   repository       = "https://argoproj.github.io/argo-helm"
