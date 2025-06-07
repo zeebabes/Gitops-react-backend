@@ -1,14 +1,14 @@
 FROM openjdk:17
 WORKDIR /app
 
-# Copy source
-COPY . .
+# Copy only the necessary file
+COPY src/main/java/Main.java .
 
 # Compile Main.java
-RUN javac src/Main.java
+RUN javac Main.java
 
-# Expose port 8090 for container access
+# Expose the port the app listens on
 EXPOSE 8090
 
-# Run the Java app
-CMD ["java", "src.Main"]
+# Run the app
+CMD ["java", "Main"]
