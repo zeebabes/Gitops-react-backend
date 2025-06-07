@@ -2,34 +2,32 @@ provider "aws" {
   region = "us-east-2"
 }
 
-provider "kubernetes" {
-  host                   = aws_eks_cluster.preyelg.endpoint
-  cluster_ca_certificate = base64decode(aws_eks_cluster.preyelg.certificate_authority[0].data)
-  token                  = data.aws_eks_cluster_auth.preyelg.token
-}
-
 data "aws_availability_zones" "available" {}
 
-data "aws_eks_cluster" "preyelg" {
-  name = aws_eks_cluster.preyelg.name
-}
-
-data "aws_eks_cluster_auth" "preyelg" {
-  name = aws_eks_cluster.preyelg.name
-}
-
-################### VPC + Networking ###################
+################### VPC + NAT Gateway Networking ###################
 
 resource "aws_vpc" "main" {
   cidr_block           = "10.0.0.0/16"
   enable_dns_support   = true
   enable_dns_hostnames = true
-  tags = { Name = "preyelg-vpc" }
+  tags = { Name = "zeebabes-vpc" }
 }
 
 resource "aws_internet_gateway" "igw" {
   vpc_id = aws_vpc.main.id
-  tags = { Name = "preyelg-igw" }
+  tags = { Name = "zeebabes-igw" }
+}
+
+resource "aws_eip" "nat" {
+  vpc = true
+}
+
+resource "aws_nat_gateway" "nat" {
+  allocation_id = aws_eip.nat.id
+  subnet_id     = aws_subnet.public[0].id
+  tags = { Name = "zeebabes-nat-gw" }
+
+  depends_on = [aws_internet_gateway.igw]
 }
 
 resource "aws_route_table" "public" {
@@ -38,7 +36,16 @@ resource "aws_route_table" "public" {
     cidr_block = "0.0.0.0/0"
     gateway_id = aws_internet_gateway.igw.id
   }
-  tags = { Name = "preyelg-public-rt" }
+  tags = { Name = "zeebabes-public-rt" }
+}
+
+resource "aws_route_table" "private" {
+  vpc_id = aws_vpc.main.id
+  route {
+    cidr_block     = "0.0.0.0/0"
+    nat_gateway_id = aws_nat_gateway.nat.id
+  }
+  tags = { Name = "zeebabes-private-rt" }
 }
 
 resource "aws_subnet" "public" {
@@ -50,18 +57,24 @@ resource "aws_subnet" "public" {
   tags = { Name = "public-${count.index}" }
 }
 
-resource "aws_route_table_association" "public_assoc" {
-  count          = 2
-  subnet_id      = aws_subnet.public[count.index].id
-  route_table_id = aws_route_table.public.id
-}
-
 resource "aws_subnet" "private" {
   count             = 2
   vpc_id            = aws_vpc.main.id
   cidr_block        = cidrsubnet("10.0.0.0/16", 4, count.index + 2)
   availability_zone = data.aws_availability_zones.available.names[count.index]
   tags = { Name = "private-${count.index}" }
+}
+
+resource "aws_route_table_association" "public_assoc" {
+  count          = 2
+  subnet_id      = aws_subnet.public[count.index].id
+  route_table_id = aws_route_table.public.id
+}
+
+resource "aws_route_table_association" "private_assoc" {
+  count          = 2
+  subnet_id      = aws_subnet.private[count.index].id
+  route_table_id = aws_route_table.private.id
 }
 
 ################### IAM Roles ###################
@@ -110,24 +123,24 @@ resource "aws_iam_role_policy_attachment" "registry_policy" {
   policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
 }
 
-################### EKS CLUSTER + NODES ###################
+################### EKS Cluster + Nodes ###################
 
-resource "aws_eks_cluster" "preyelg" {
-  name     = "preyelg"
+resource "aws_eks_cluster" "zeebabes" {
+  name     = "zeebabes"
   role_arn = aws_iam_role.eks_cluster_role.arn
 
   vpc_config {
-    subnet_ids = aws_subnet.public[*].id
+    subnet_ids = aws_subnet.private[*].id
   }
 
   depends_on = [aws_iam_role_policy_attachment.eks_cluster_policy]
 }
 
 resource "aws_eks_node_group" "default" {
-  cluster_name    = aws_eks_cluster.preyelg.name
-  node_group_name = "preyelg-node-group"
+  cluster_name    = aws_eks_cluster.zeebabes.name
+  node_group_name = "zeebabes-node-group"
   node_role_arn   = aws_iam_role.node_group_role.arn
-  subnet_ids      = aws_subnet.public[*].id
+  subnet_ids      = aws_subnet.private[*].id
 
   scaling_config {
     desired_size = 2
@@ -151,6 +164,30 @@ resource "aws_eks_node_group" "default" {
   ]
 }
 
+################### Kubernetes & Helm Providers ###################
+
+data "aws_eks_cluster" "zeebabes" {
+  name = aws_eks_cluster.zeebabes.name
+}
+
+data "aws_eks_cluster_auth" "zeebabes" {
+  name = aws_eks_cluster.zeebabes.name
+}
+
+provider "kubernetes" {
+  host                   = data.aws_eks_cluster.zeebabes.endpoint
+  cluster_ca_certificate = base64decode(data.aws_eks_cluster.zeebabes.certificate_authority[0].data)
+  token                  = data.aws_eks_cluster_auth.zeebabes.token
+}
+
+provider "helm" {
+  kubernetes {
+    host                   = data.aws_eks_cluster.zeebabes.endpoint
+    cluster_ca_certificate = base64decode(data.aws_eks_cluster.zeebabes.certificate_authority[0].data)
+    token                  = data.aws_eks_cluster_auth.zeebabes.token
+  }
+}
+
 ################### aws-auth ConfigMap ###################
 
 resource "kubernetes_config_map" "aws_auth" {
@@ -160,29 +197,19 @@ resource "kubernetes_config_map" "aws_auth" {
     namespace = "kube-system"
   }
   data = {
-    mapRoles = yamlencode([
-      {
-        rolearn  = aws_iam_role.node_group_role.arn
-        username = "system:node:{{EC2PrivateDNSName}}"
-        groups   = [
-          "system:bootstrappers",
-          "system:nodes"
-        ]
-      }
-    ])
-  }
-}
-
-################### Helm Provider for ArgoCD ###################
-provider "helm" {
-  kubernetes {
-    host                   = data.aws_eks_cluster.preyelg.endpoint
-    cluster_ca_certificate = base64decode(data.aws_eks_cluster.preyelg.certificate_authority[0].data)
-    token                  = data.aws_eks_cluster_auth.preyelg.token
+    mapRoles = yamlencode([{
+      rolearn  = aws_iam_role.node_group_role.arn
+      username = "system:node:{{EC2PrivateDNSName}}"
+      groups   = [
+        "system:bootstrappers",
+        "system:nodes"
+      ]
+    }])
   }
 }
 
 ################### ArgoCD Helm Chart ###################
+
 resource "helm_release" "argocd" {
   name       = "argocd"
   namespace  = "argocd"
@@ -191,15 +218,13 @@ resource "helm_release" "argocd" {
   version    = "5.52.1"
 
   create_namespace = true
-
-  values = [file("argocd-values.yaml")]  # optional custom values
+  values = [file("argocd-values.yaml")]
 
   depends_on = [
-    aws_eks_cluster.preyelg,
+    aws_eks_cluster.zeebabes,
     aws_eks_node_group.default
   ]
 }
-
 
 ################### Outputs ###################
 
