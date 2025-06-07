@@ -1,14 +1,14 @@
 FROM openjdk:17
 WORKDIR /app
 
-# Copy only the necessary file
+# Copy Main.java from Maven-style path
 COPY src/main/java/Main.java .
 
-# Compile Main.java
+# Compile without package
 RUN javac Main.java
 
-# Expose the port the app listens on
+# Expose the port your app uses
 EXPOSE 8090
 
-# Run the app
+# Run Main class from root of classpath
 CMD ["java", "Main"]
