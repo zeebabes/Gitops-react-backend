@@ -64,10 +64,10 @@ module "vpc" {
   }
 }
 
-# EKS Cluster Module (corrected for v20+)
+# EKS Cluster Module (using GitHub source directly to guarantee vpc_subnet_ids support)
 module "eks" {
-  source          = "terraform-aws-modules/eks/aws"
-  version         = "20.8.4"
+  source  = "github.com/terraform-aws-modules/terraform-aws-eks.git?ref=v20.8.4"
+
   cluster_name    = var.cluster_name
   cluster_version = "1.27"
   vpc_id          = module.vpc.vpc_id
