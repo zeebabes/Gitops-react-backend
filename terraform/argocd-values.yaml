@@ -3,3 +3,7 @@ server:
     type: LoadBalancer
   ingress:
     enabled: false
+
+configs:
+  secret:
+    argocdServerAdminPassword: $2a$12$4N3zZzKXpjBDzj/7aJULNesTN9YvAGkjF2q5wT4gV9iZ7Uw0kIGhy  # password: admin123
