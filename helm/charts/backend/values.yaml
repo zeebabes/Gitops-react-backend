@@ -1,0 +1,10 @@
+image:
+  repository: nottiey/backend
+  tag: "0.2.3"
+  pullPolicy: IfNotPresent
+  args:
+    - "-text=Hello from Backend"
+
+service:
+  type: ClusterIP
+  port: 5678
