@@ -41,7 +41,7 @@ module "vpc" {
   }
 }
 
-# EKS Module (v17.24.0 using node_groups and subnets)
+# EKS Cluster Module
 module "eks" {
   source  = "terraform-aws-modules/eks/aws"
   version = "17.24.0"
@@ -60,13 +60,16 @@ module "eks" {
     }
   }
 
+  # ✅ Prevent circular dependency
+  manage_aws_auth = false
+
   tags = {
     Environment = "gitops"
     Terraform   = "true"
   }
 }
 
-# Delay cluster lookup until EKS is provisioned
+# Delay EKS access until created
 data "aws_eks_cluster" "cluster" {
   name       = module.eks.cluster_id
   depends_on = [module.eks]
@@ -77,6 +80,7 @@ data "aws_eks_cluster_auth" "cluster" {
   depends_on = [module.eks]
 }
 
+# Kubernetes provider (used by Helm)
 provider "kubernetes" {
   host                   = data.aws_eks_cluster.cluster.endpoint
   cluster_ca_certificate = base64decode(data.aws_eks_cluster.cluster.certificate_authority[0].data)
@@ -93,7 +97,7 @@ provider "helm" {
   load_config_file = false
 }
 
-# Deploy ArgoCD with Helm
+# ArgoCD Helm release
 resource "helm_release" "argocd" {
   name             = "argocd"
   repository       = "https://argoproj.github.io/argo-helm"
