@@ -157,6 +157,12 @@ resource "aws_eks_node_group" "node_group" {
     ec2_ssh_key = var.ssh_key_name
   }
 
+  tags = {
+    Name        = "eks-frontend-node"
+    Environment = "dev"
+    Project     = "gitops-react-app"
+  }
+
   depends_on = [
     aws_iam_role_policy_attachment.worker_node_policy,
     aws_iam_role_policy_attachment.cni_policy,
