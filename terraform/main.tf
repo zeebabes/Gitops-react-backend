@@ -64,9 +64,10 @@ module "vpc" {
   }
 }
 
-# EKS Cluster Module (using GitHub source directly to guarantee vpc_subnet_ids support)
-module "eks_git" {
-  source  = "github.com/terraform-aws-modules/terraform-aws-eks.git?ref=v20.8.4"
+# EKS Cluster Module — stable version supporting vpc_subnet_ids
+module "eks" {
+  source  = "terraform-aws-modules/eks/aws"
+  version = "19.21.0"
 
   cluster_name    = var.cluster_name
   cluster_version = "1.27"
@@ -88,7 +89,7 @@ module "eks_git" {
   }
 }
 
-# Install ArgoCD with Helm
+# ArgoCD Helm Deployment
 resource "helm_release" "argocd" {
   name             = "argocd"
   repository       = "https://argoproj.github.io/argo-helm"
