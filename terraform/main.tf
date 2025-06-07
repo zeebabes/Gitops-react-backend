@@ -188,26 +188,6 @@ provider "helm" {
   }
 }
 
-################### aws-auth ConfigMap ###################
-
-resource "kubernetes_config_map" "aws_auth" {
-  depends_on = [aws_eks_node_group.node_group]
-  metadata {
-    name      = "aws-auth"
-    namespace = "kube-system"
-  }
-  data = {
-    mapRoles = yamlencode([{
-      rolearn  = aws_iam_role.eks_node_role.arn
-      username = "system:node:{{EC2PrivateDNSName}}"
-      groups   = [
-        "system:bootstrappers",
-        "system:nodes"
-      ]
-    }])
-  }
-}
-
 ################### ArgoCD Helm Chart ###################
 
 resource "helm_release" "argocd" {
@@ -245,5 +225,5 @@ output "dashboard_access_command" {
 }
 
 output "aws_auth_applied" {
-  value = "aws-auth ConfigMap is applied via Terraform"
+  value = "aws-auth is automatically handled by EKS"
 }
