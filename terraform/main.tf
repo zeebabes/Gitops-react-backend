@@ -4,7 +4,16 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 5.0"
     }
+    kubernetes = {
+      source  = "hashicorp/kubernetes"
+      version = "~> 2.20"
+    }
+    helm = {
+      source  = "hashicorp/helm"
+      version = "~> 2.11"
+    }
   }
+
   required_version = ">= 1.3.0"
 }
 
@@ -32,7 +41,7 @@ module "vpc" {
   }
 }
 
-# EKS Cluster Module (v17.x, uses `subnets`)
+# EKS Module (v17.24.0 using node_groups and subnets)
 module "eks" {
   source  = "terraform-aws-modules/eks/aws"
   version = "17.24.0"
@@ -55,4 +64,46 @@ module "eks" {
     Environment = "gitops"
     Terraform   = "true"
   }
+}
+
+# Delay cluster lookup until EKS is provisioned
+data "aws_eks_cluster" "cluster" {
+  name       = module.eks.cluster_id
+  depends_on = [module.eks]
+}
+
+data "aws_eks_cluster_auth" "cluster" {
+  name       = module.eks.cluster_id
+  depends_on = [module.eks]
+}
+
+provider "kubernetes" {
+  host                   = data.aws_eks_cluster.cluster.endpoint
+  cluster_ca_certificate = base64decode(data.aws_eks_cluster.cluster.certificate_authority[0].data)
+  token                  = data.aws_eks_cluster_auth.cluster.token
+  load_config_file       = false
+}
+
+provider "helm" {
+  kubernetes {
+    host                   = data.aws_eks_cluster.cluster.endpoint
+    cluster_ca_certificate = base64decode(data.aws_eks_cluster.cluster.certificate_authority[0].data)
+    token                  = data.aws_eks_cluster_auth.cluster.token
+  }
+  load_config_file = false
+}
+
+# Deploy ArgoCD with Helm
+resource "helm_release" "argocd" {
+  name             = "argocd"
+  repository       = "https://argoproj.github.io/argo-helm"
+  chart            = "argo-cd"
+  namespace        = "argocd"
+  create_namespace = true
+
+  values = [
+    file("${path.module}/argocd-values.yaml")
+  ]
+
+  depends_on = [module.eks]
 }
