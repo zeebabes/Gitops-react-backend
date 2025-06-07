@@ -1,5 +1,5 @@
 provider "aws" {
-  region = "us-east-2"
+  region = var.aws_region
 }
 
 data "aws_availability_zones" "available" {}
@@ -126,7 +126,7 @@ resource "aws_iam_role_policy_attachment" "registry_policy" {
 ################### EKS Cluster + Nodes ###################
 
 resource "aws_eks_cluster" "eks_cluster" {
-  name     = "eks-cluster"
+  name     = var.cluster_name
   role_arn = aws_iam_role.eks_cluster_role.arn
 
   vpc_config {
@@ -138,23 +138,23 @@ resource "aws_eks_cluster" "eks_cluster" {
 
 resource "aws_eks_node_group" "node_group" {
   cluster_name    = aws_eks_cluster.eks_cluster.name
-  node_group_name = "eks-node-group"
+  node_group_name = var.node_group_name
   node_role_arn   = aws_iam_role.eks_node_role.arn
   subnet_ids      = aws_subnet.private[*].id
 
   scaling_config {
-    desired_size = 2
-    max_size     = 2
-    min_size     = 1
+    desired_size = var.desired_capacity
+    max_size     = var.max_capacity
+    min_size     = var.min_capacity
   }
 
-  instance_types = ["t3.medium"]
-  disk_size      = 20
+  instance_types = [var.instance_type]
+  disk_size      = var.disk_size
   ami_type       = "AL2_x86_64"
   capacity_type  = "ON_DEMAND"
 
   remote_access {
-    ec2_ssh_key = "zeecentoskey"
+    ec2_ssh_key = var.ssh_key_name
   }
 
   depends_on = [
@@ -237,7 +237,7 @@ output "endpoint" {
 }
 
 output "kubeconfig_command" {
-  value = "aws eks update-kubeconfig --region us-east-2 --name ${aws_eks_cluster.eks_cluster.name}"
+  value = "aws eks update-kubeconfig --region ${var.aws_region} --name ${aws_eks_cluster.eks_cluster.name}"
 }
 
 output "dashboard_access_command" {
