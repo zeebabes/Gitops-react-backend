@@ -1,0 +1,99 @@
+node_modules
+build
+.env
+Java and Maven
+target/
+*.class
+*.jar
+*.war
+*.ear
+*.log
+
+Maven Wrapper
+.mvn/
+!/.mvn/wrapper/maven-wrapper.jar
+mvnw
+mvnw.cmd
+
+Eclipse
+.project
+.classpath
+.settings/
+bin/
+
+IntelliJ IDEA
+.idea/
+*.iws
+*.iml
+*.ipr
+out/
+
+VS Code
+.vscode/
+
+OS-generated files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+Environment variables and secrets
+.env
+.env.*
+*.secret
+*.key
+*.pem
+*.crt
+
+Docker
+docker-compose.override.yml
+docker-compose..yml
+Dockerfile.
+*.tar
+*.gz
+*.bak
+
+Jenkins
+/jenkins_home/
+/jobs/
+/workspace/
+/builds/
+/logs/
+
+Terraform (optional)
+.terraform/
+*.tfstate
+.tfstate.
+.terraform.lock.hcl
+crash.log
+terraform.tfvars
+override.tf
+override.tf.json
+*.backup
+
+Kubernetes (optional)
+*.kube/config
+*.kube/cache/
+
+Logs and temp
+*.tmp
+*.swp
+*.swo
+*.bak
+*.orig
+nohup.out
+
+Compiled or package artifacts
+dist/
+build/
+
+Optional test/coverage output
+/test-output/
+/coverage/
+/jacoco.exec
+
+Node.js artifacts (if frontend exists)
+node_modules/
+npm-debug.log
+yarn-error.log
+pnpm-lock.yaml
