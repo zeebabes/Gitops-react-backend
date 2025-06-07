@@ -1,5 +1,5 @@
 image:
-  repository: nottiey/backend
+  repository: zeebabes/backend
   tag: "0.2.3"
   pullPolicy: IfNotPresent
   args:
