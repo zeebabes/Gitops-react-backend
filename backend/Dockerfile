@@ -1,12 +1,14 @@
-# Stage 1: Build
-FROM maven:3.8.7-amazoncorretto-17 AS build
+FROM openjdk:17
 WORKDIR /app
-COPY . .
-RUN mvn clean package -DskipTests
 
-# Stage 2: Run
-FROM amazoncorretto:17-alpine
-WORKDIR /app
-COPY --from=build /app/target/*.jar app.jar
+# Copy source
+COPY . .
+
+# Compile Main.java
+RUN javac src/Main.java
+
+# Expose port 8090 for container access
 EXPOSE 8090
-ENTRYPOINT ["java", "-jar", "app.jar"]
+
+# Run the Java app
+CMD ["java", "src.Main"]
