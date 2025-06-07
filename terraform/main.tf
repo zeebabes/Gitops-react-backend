@@ -1,113 +1,224 @@
-terraform {
-  required_providers {
-    aws = {
-      source  = "hashicorp/aws"
-      version = "~> 5.0"
-    }
-    kubernetes = {
-      source  = "hashicorp/kubernetes"
-      version = "~> 2.20"
-    }
-    helm = {
-      source  = "hashicorp/helm"
-      version = "~> 2.11"
-    }
-  }
-
-  required_version = ">= 1.3.0"
-}
-
 provider "aws" {
-  region = var.aws_region
+  region = "us-east-2"
 }
 
-# VPC Module
-module "vpc" {
-  source  = "terraform-aws-modules/vpc/aws"
-  version = "4.0.2"
-
-  name = "gitops-vpc"
-  cidr = "10.0.0.0/16"
-
-  azs             = ["${var.aws_region}a", "${var.aws_region}b"]
-  private_subnets = ["10.0.1.0/24", "10.0.2.0/24"]
-  public_subnets  = ["10.0.101.0/24", "10.0.102.0/24"]
-
-  enable_nat_gateway = true
-  single_nat_gateway = true
-
-  tags = {
-    Name = "gitops-vpc"
-  }
-}
-
-# EKS Cluster Module
-module "eks" {
-  source  = "terraform-aws-modules/eks/aws"
-  version = "17.24.0"
-
-  cluster_name    = var.cluster_name
-  cluster_version = "1.27"
-  vpc_id          = module.vpc.vpc_id
-  subnets         = module.vpc.private_subnets
-
-  node_groups = {
-    default = {
-      desired_capacity = 2
-      max_capacity     = 3
-      min_capacity     = 1
-      instance_type    = "t3.medium"
-    }
-  }
-
-  # ✅ Prevent circular dependency
-  manage_aws_auth = false
-
-  tags = {
-    Environment = "gitops"
-    Terraform   = "true"
-  }
-}
-
-# Delay EKS access until created
-data "aws_eks_cluster" "cluster" {
-  name       = module.eks.cluster_id
-  depends_on = [module.eks]
-}
-
-data "aws_eks_cluster_auth" "cluster" {
-  name       = module.eks.cluster_id
-  depends_on = [module.eks]
-}
-
-# Kubernetes provider (used by Helm)
 provider "kubernetes" {
-  host                   = data.aws_eks_cluster.cluster.endpoint
-  cluster_ca_certificate = base64decode(data.aws_eks_cluster.cluster.certificate_authority[0].data)
-  token                  = data.aws_eks_cluster_auth.cluster.token
-  load_config_file       = false
+  host                   = aws_eks_cluster.preyelg.endpoint
+  cluster_ca_certificate = base64decode(aws_eks_cluster.preyelg.certificate_authority[0].data)
+  token                  = data.aws_eks_cluster_auth.preyelg.token
 }
 
+data "aws_availability_zones" "available" {}
+
+data "aws_eks_cluster" "preyelg" {
+  name = aws_eks_cluster.preyelg.name
+}
+
+data "aws_eks_cluster_auth" "preyelg" {
+  name = aws_eks_cluster.preyelg.name
+}
+
+################### VPC + Networking ###################
+
+resource "aws_vpc" "main" {
+  cidr_block           = "10.0.0.0/16"
+  enable_dns_support   = true
+  enable_dns_hostnames = true
+  tags = { Name = "preyelg-vpc" }
+}
+
+resource "aws_internet_gateway" "igw" {
+  vpc_id = aws_vpc.main.id
+  tags = { Name = "preyelg-igw" }
+}
+
+resource "aws_route_table" "public" {
+  vpc_id = aws_vpc.main.id
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.igw.id
+  }
+  tags = { Name = "preyelg-public-rt" }
+}
+
+resource "aws_subnet" "public" {
+  count                   = 2
+  vpc_id                  = aws_vpc.main.id
+  cidr_block              = cidrsubnet("10.0.0.0/16", 4, count.index)
+  map_public_ip_on_launch = true
+  availability_zone       = data.aws_availability_zones.available.names[count.index]
+  tags = { Name = "public-${count.index}" }
+}
+
+resource "aws_route_table_association" "public_assoc" {
+  count          = 2
+  subnet_id      = aws_subnet.public[count.index].id
+  route_table_id = aws_route_table.public.id
+}
+
+resource "aws_subnet" "private" {
+  count             = 2
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = cidrsubnet("10.0.0.0/16", 4, count.index + 2)
+  availability_zone = data.aws_availability_zones.available.names[count.index]
+  tags = { Name = "private-${count.index}" }
+}
+
+################### IAM Roles ###################
+
+resource "aws_iam_role" "eks_cluster_role" {
+  name = "eks-cluster-role"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action    = "sts:AssumeRole"
+      Effect    = "Allow"
+      Principal = { Service = "eks.amazonaws.com" }
+    }]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "eks_cluster_policy" {
+  role       = aws_iam_role.eks_cluster_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEKSClusterPolicy"
+}
+
+resource "aws_iam_role" "node_group_role" {
+  name = "eks-node-role"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action    = "sts:AssumeRole"
+      Effect    = "Allow"
+      Principal = { Service = "ec2.amazonaws.com" }
+    }]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "worker_node_policy" {
+  role       = aws_iam_role.node_group_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy"
+}
+
+resource "aws_iam_role_policy_attachment" "cni_policy" {
+  role       = aws_iam_role.node_group_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy"
+}
+
+resource "aws_iam_role_policy_attachment" "registry_policy" {
+  role       = aws_iam_role.node_group_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
+}
+
+################### EKS CLUSTER + NODES ###################
+
+resource "aws_eks_cluster" "preyelg" {
+  name     = "preyelg"
+  role_arn = aws_iam_role.eks_cluster_role.arn
+
+  vpc_config {
+    subnet_ids = aws_subnet.public[*].id
+  }
+
+  depends_on = [aws_iam_role_policy_attachment.eks_cluster_policy]
+}
+
+resource "aws_eks_node_group" "default" {
+  cluster_name    = aws_eks_cluster.preyelg.name
+  node_group_name = "preyelg-node-group"
+  node_role_arn   = aws_iam_role.node_group_role.arn
+  subnet_ids      = aws_subnet.public[*].id
+
+  scaling_config {
+    desired_size = 2
+    max_size     = 2
+    min_size     = 1
+  }
+
+  instance_types = ["t3.medium"]
+  disk_size      = 20
+  ami_type       = "AL2_x86_64"
+  capacity_type  = "ON_DEMAND"
+
+  remote_access {
+    ec2_ssh_key = "zeecentoskey"
+  }
+
+  depends_on = [
+    aws_iam_role_policy_attachment.worker_node_policy,
+    aws_iam_role_policy_attachment.cni_policy,
+    aws_iam_role_policy_attachment.registry_policy
+  ]
+}
+
+################### aws-auth ConfigMap ###################
+
+resource "kubernetes_config_map" "aws_auth" {
+  depends_on = [aws_eks_node_group.default]
+  metadata {
+    name      = "aws-auth"
+    namespace = "kube-system"
+  }
+  data = {
+    mapRoles = yamlencode([
+      {
+        rolearn  = aws_iam_role.node_group_role.arn
+        username = "system:node:{{EC2PrivateDNSName}}"
+        groups   = [
+          "system:bootstrappers",
+          "system:nodes"
+        ]
+      }
+    ])
+  }
+}
+
+################### Helm Provider for ArgoCD ###################
 provider "helm" {
   kubernetes {
-    host                   = data.aws_eks_cluster.cluster.endpoint
-    cluster_ca_certificate = base64decode(data.aws_eks_cluster.cluster.certificate_authority[0].data)
-    token                  = data.aws_eks_cluster_auth.cluster.token
+    host                   = data.aws_eks_cluster.preyelg.endpoint
+    cluster_ca_certificate = base64decode(data.aws_eks_cluster.preyelg.certificate_authority[0].data)
+    token                  = data.aws_eks_cluster_auth.preyelg.token
   }
-  load_config_file = false
 }
 
-# ArgoCD Helm release
+################### ArgoCD Helm Chart ###################
 resource "helm_release" "argocd" {
-  name             = "argocd"
-  repository       = "https://argoproj.github.io/argo-helm"
-  chart            = "argo-cd"
-  namespace        = "argocd"
+  name       = "argocd"
+  namespace  = "argocd"
+  repository = "https://argoproj.github.io/argo-helm"
+  chart      = "argo-cd"
+  version    = "5.52.1"
+
   create_namespace = true
 
-  values = [
-    file("${path.module}/argocd-values.yaml")
-  ]
+  values = [file("argocd-values.yaml")]  # optional custom values
 
-  depends_on = [module.eks]
+  depends_on = [
+    aws_eks_cluster.preyelg,
+    aws_eks_node_group.default
+  ]
+}
+
+
+################### Outputs ###################
+
+output "cluster_name" {
+  value = aws_eks_cluster.zeebabes.name
+}
+
+output "endpoint" {
+  value = aws_eks_cluster.zeebabes.endpoint
+}
+
+output "kubeconfig_command" {
+  value = "aws eks update-kubeconfig --region us-east-2 --name ${aws_eks_cluster.zeebabes.name}"
+}
+
+output "dashboard_access_command" {
+  value = "kubectl proxy --address='0.0.0.0' --disable-filter=true"
+}
+
+output "aws_auth_applied" {
+  value = "aws-auth ConfigMap is applied via Terraform"
 }
