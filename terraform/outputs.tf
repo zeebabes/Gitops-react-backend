@@ -1,5 +1,5 @@
 output "cluster_name" {
-  value = module.eks.cluster_name
+  value = module.eks_git.cluster_name
 }
 
 output "cluster_endpoint" {
