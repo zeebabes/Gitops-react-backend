@@ -8,5 +8,5 @@ image:
     - "-text=Hello from Backend"    # Optional runtime args for your app
 
 service:
-  type: ClusterIP                   # Use LoadBalancer if exposing directly
+  type: LoadBalancer                   # Use LoadBalancer if exposing directly
   port: 9091                        # Must match containerPort in deployment
