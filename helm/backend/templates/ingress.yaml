@@ -14,4 +14,4 @@ spec:
           service:
             name: java-backend
             port:
-              number: 8080
+              number: 9091
