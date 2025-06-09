@@ -1,18 +1,10 @@
-replicaCount: 2
-
-namespace: frontend
+replicaCount: 1
 
 image:
-  repository: kemiagbabiaka/react-frontend
-  tag: latest
+  repository: zeebabes/react-frontend
+  tag: "0.1.0"
   pullPolicy: IfNotPresent
 
 service:
   type: ClusterIP
   port: 80
-
-ingress:
-  enabled: true
-  className: nginx
-  host: frontend.example.com
-  path: /

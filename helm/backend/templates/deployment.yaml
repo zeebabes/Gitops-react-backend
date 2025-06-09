@@ -26,5 +26,5 @@ spec:
           args: {{ toYaml .Values.image.args | nindent 10 }}
           ports:
             - name: http
-              containerPort: 9091
+              containerPort: 8080
               protocol: TCP
