@@ -1,12 +1,14 @@
 FROM openjdk:17
 WORKDIR /app
 
-# Copy source and compile it
-COPY src/main/java/Main.java Main.java
+# Copy Main.java to /app
+COPY src/main/java/Main.java .
+
+# Compile Main.java to Main.class
 RUN javac Main.java
 
-# Set container port
+# Expose the backend port
 EXPOSE 8090
 
-# Run Main class
+# Run the compiled Main class
 CMD ["java", "Main"]
