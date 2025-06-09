@@ -1,6 +1,14 @@
+# Disable persistent volumes for Prometheus and Alertmanager
 prometheus:
   prometheusSpec:
-    storageSpec:
+    enableAdminAPI: true
+    retention: 7d
+  persistence:
+    enabled: false
+
+alertmanager:
+  alertmanagerSpec:
+    storage:
       volumeClaimTemplate:
         spec:
           storageClassName: "-"
@@ -8,8 +16,14 @@ prometheus:
           resources:
             requests:
               storage: 1Gi
-    retention: 7d
-    enableAdminAPI: true
-
   persistence:
-    enabled: false 
+    enabled: false
+
+# Disable PVC for kube-state-metrics and node-exporter if they use it
+kube-state-metrics:
+  persistentVolume:
+    enabled: false
+
+nodeExporter:
+  persistentVolume:
+    enabled: false
