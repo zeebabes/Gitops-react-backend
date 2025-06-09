@@ -1,14 +1,12 @@
-FROM openjdk:17
+# Stage 1: Build
+FROM maven:3.8.7-amazoncorretto-17 AS build
 WORKDIR /app
+COPY . .
+RUN mvn clean package -DskipTests
 
-# Copy Main.java to /app
-COPY src/main/java/Main.java .
-
-# Compile Main.java to Main.class
-RUN javac Main.java
-
-# Expose the backend port
+# Stage 2: Run
+FROM amazoncorretto:17-alpine
+WORKDIR /app
+COPY --from=build /app/target/*.jar app.jar
 EXPOSE 8090
-
-# Run the compiled Main class
-CMD ["java", "Main"]
+ENTRYPOINT ["java", "-jar", "app.jar"]
