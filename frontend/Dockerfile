@@ -20,5 +20,5 @@ RUN npm run build
 FROM nginx:alpine
 COPY --from=0 /app/build /usr/share/nginx/html
 
-EXPOSE 8091
+EXPOSE 809
 CMD ["nginx", "-g", "daemon off;"]
