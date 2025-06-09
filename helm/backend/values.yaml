@@ -3,7 +3,7 @@ replicaCount: 1
 image:
   repository: kemiagbabiaka/java-backend
   tag: latest
-  pullPolicy: IfNotPresent
+  pullPolicy: Always
   args:
     - "-text=Hello from Backend"
 
