@@ -1,22 +1,17 @@
-{{- if .Values.ingress.enabled }}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: backend-ingress
-  namespace: {{ .Values.namespace }}
   annotations:
     nginx.ingress.kubernetes.io/rewrite-target: /
 spec:
-  ingressClassName: {{ .Values.ingress.className }}
   rules:
-    - host: {{ .Values.ingress.backendHost }}
-      http:
-        paths:
-          - path: {{ .Values.ingress.backendPath }}
-            pathType: {{ .Values.ingress.backendPathType | default "Prefix" }}
-            backend:
-              service:
-                name: {{ .Values.backendService.name | default "backend" }}
-                port:
-                  number: {{ .Values.backendService.port }}
-{{- end }}
+  - http:
+      paths:
+      - path: /api
+        pathType: Prefix
+        backend:
+          service:
+            name: java-backend
+            port:
+              number: 8080
