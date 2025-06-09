@@ -1,12 +1,17 @@
 replicaCount: 1
 
 image:
-  repository: zeebabes/backend      # Docker Hub or ECR image
-  tag: "0.2.3"                      # Your backend version
+  repository: kemiagbabiaka/java-backend
+  tag: latest
   pullPolicy: IfNotPresent
   args:
-    - "-text=Hello from Backend"    # Optional runtime args for your app
+    - "-text=Hello from Backend"
 
 service:
-  type: ClusterIP                   # Use LoadBalancer if exposing directly
-  port: 8080                        # Must match containerPort in deployment
+  type: ClusterIP
+  port: 9091
+
+ingress:
+  enabled: true
+  path: /api
+  ingressClassName: nginx
